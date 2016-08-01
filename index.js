@@ -4,6 +4,7 @@ var Twit = require('twit');
 var accelaConfig = require('./accela-config.js');
 var twitterConfig = require('./twitter-config.js');
 
+console.log(Date());
 var Bot = new Twit(twitterConfig);
 
 var oauthOptions = {
@@ -19,7 +20,7 @@ var oauthOptions = {
 };
 
 request(oauthOptions, function (error, response, body) {
-  if (error) throw new Error(error);
+  if (error) console.error('error getting access token', error);
 
   var accela_token = body.access_token;
   var yesterday = moment().subtract(1, 'days').format('YYYY-MM-DD') + ' 00:00:00';
@@ -45,8 +46,11 @@ request(oauthOptions, function (error, response, body) {
   };
 
   request(searchOptions, function (error, response, body) {
-    if (error) throw new Error(error);
-    if (!body.result) return; // no search results
+    if (error) console.error('error making search', error);
+    if (!body.result) {
+      console.log('no search results');
+      return; // no search results
+    }
     
     for (var i = 0; i < body.result.length; i++) {
       var record = body.result[i];
@@ -71,12 +75,13 @@ function staggerTweet(street, status, delay) {
 function createTweet(street, status) {
   var location = encodeURI(street + ', Atlanta, GA');
   request.get('https://maps.googleapis.com/maps/api/streetview?size=600x400&location=' + location, function (error, response, body) {
-    if (!error && response.statusCode == 200) {
+    if (error) {
+      console.error('error getting streetview image', error);
+    } else {
       imageData = "data:" + response.headers["content-type"] + ";base64," + new Buffer(body).toString('base64');
 
       Bot.post('media/upload', { media_data: new Buffer(body).toString('base64') }, function (err, data, response) {
-        console.log('upload')
-        console.log(err)
+        if (err) console.error('error uploading image to Twitter', err);
         // now we can assign alt text to the media, for use by screen readers and 
         // other text-based presentations and interpreters 
         var mediaIdStr = data.media_id_string
@@ -84,13 +89,15 @@ function createTweet(street, status) {
       
 
         Bot.post('media/metadata/create', meta_params, function (err, data, response) {
-          console.log(err);
-          if (!err) {
+          if (err) {
+            console.error('error creating metadata', err);
+          } else {
             // now we can reference the media and post a tweet (media will attach to the tweet) 
             var params = { status: status, media_ids: [mediaIdStr] }
        
             Bot.post('statuses/update', params, function (err, data, response) {
-              console.log('done');
+              if (err) console.error('error tweeting', err);
+              else console.log('done tweeting');
             });
           }
         })
